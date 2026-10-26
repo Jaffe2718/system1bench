@@ -8,14 +8,17 @@ from concurrent.futures import ThreadPoolExecutor
 import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download
 
-from .common import DATA, ROOT, read, sha, write
+from .common import DATA, ROOT, read, required_external_files, sha, write
 
 
 def fetch_url(url, target, expected):
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(url, timeout=120) as response:
-            target.write_bytes(response.read())
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response:
+                target.write_bytes(response.read())
+        except Exception as exc:
+            raise RuntimeError(f"Download failed: {url} ({type(exc).__name__}: {exc})") from exc
     if sha(target) != expected:
         raise ValueError(f"Source hash mismatch: {target.name}")
 
@@ -61,7 +64,10 @@ def main():
         raise ValueError("Ontology mismatch")
     write(DATA / "datasets/massive_ontology/labels.json", ontology)
     for name, spec in read(ROOT / "external_sources.json").items():
-        for file in spec["files"]:
+        files = required_external_files(name, spec)
+        if len(files) != len(spec["files"]):
+            print("Not fetched: clinc/api_metadata.json (historical API receipt; not a dataset file or evaluation input)", flush=True)
+        for file in files:
             url = (f'https://raw.githubusercontent.com/{spec["repo"]}/{spec["revision"]}/{file["path"]}'
                    if spec.get("provider", "github") == "github" else
                    f'https://huggingface.co/datasets/{spec["repo"]}/resolve/{spec["revision"]}/{file["path"]}')

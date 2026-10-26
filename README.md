@@ -351,6 +351,31 @@ per-suite compressed raw predictions and a completed-run manifest:
 [Llama-3.1-8B-Instruct](results/llama31_8b_instruct/metadata.json),
 [Qwen3-8B](results/qwen3_8b/metadata.json).
 
+## Run this fork on Google Colab (T4)
+
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Jaffe2718/system1bench/blob/main/notebooks/system1bench_t4.ipynb)
+
+中文：选择 T4 GPU 后，从上到下运行 notebook。它会克隆这个公开 fork，
+复用 Colab 当前 Python 与预装 PyTorch，在可访问系统包的虚拟环境中安装 Laya 评测依赖，
+执行依赖冲突、模块导入和真实 GPU 推理检查，再运行评测并下载结果。默认使用 Colab 临时磁盘；
+可选 Google Drive 挂载失败时会自动回退，不阻断评测。
+**无需配置 GH_TOKEN，也不会从 Colab 提交 GitHub。**
+
+This notebook runs Laya English or Multilingual with batch size 1. It reuses
+Colab's installed PyTorch and checks the dependency plan before installation.
+It includes data preparation, choice/noul/score inference checks, evaluation,
+error-count checks, reports and result export. Google Drive is optional; mount
+failures fall back to temporary Colab storage. It does not adapt the BF16 8B/27B
+baselines for T4. GPU execution has not yet been validated in Colab.
+See [the Colab dependency file](requirements-colab-t4.txt).
+Use a fresh output directory when changing dependencies, code, model or batch size.
+
+The historical source registry also lists `clinc/api_metadata.json`, an archived
+API-response receipt that is not a file in the pinned Hugging Face revision and
+returns 404. Download and preparation explicitly exclude that non-input receipt.
+The pinned CLINC README (label order), test parquet, source registry bytes and
+all evaluation-input SHA256 checks are preserved.
+
 ## Reproduce
 
 Python 3.11+ and a CUDA GPU are required for the Laya runs. The reference run used

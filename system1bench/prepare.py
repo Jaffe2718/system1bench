@@ -8,7 +8,7 @@ import pyarrow.parquet as pq
 import yaml
 
 from . import base_prepare
-from .common import DATA, ROOT, digest, labels, read, sha, write
+from .common import DATA, ROOT, digest, labels, read, required_external_files, sha, write
 from .jev_laya_tasks import TASKS
 
 SEED = 20260927
@@ -49,7 +49,7 @@ def order_control(cases, condition):
 def main():
     registry = read(ROOT / "external_sources.json")
     for name, spec in registry.items():
-        for f in spec["files"]:
+        for f in required_external_files(name, spec):
             if sha(DATA / "external" / name / f["path"]) != f["sha256"]:
                 raise ValueError("Source changed")
     base_prepare.prepare()

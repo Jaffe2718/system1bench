@@ -8,6 +8,18 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
 
 
+def required_external_files(name, spec):
+    """Exclude one archived API receipt that is not an upstream dataset file.
+
+    CLINC's api_metadata.json is a historical API-response snapshot, not a
+    file in the pinned Hub revision. Preparation uses README.md for label
+    order and the pinned parquet for examples; it never reads this receipt.
+    Keep the historical registry bytes and all actual input hashes unchanged.
+    """
+    return [f for f in spec["files"]
+            if (name, f["path"]) != ("clinc", "api_metadata.json")]
+
+
 def sha(path):
     h = hashlib.sha256()
     with Path(path).open("rb") as f:

@@ -6,8 +6,9 @@ processes. A single model's admission/load/case failure does not stop its peers.
 This is code support, not a claim that every new backend has passed Colab T4.
 
 No dependencies are installed in the user's Windows environment. Installation
-and checkpoint/source downloads are notebook operations guarded by `/content`
-and CUDA checks; local tests inject fake engines and use existing libraries.
+and checkpoint/source downloads occur only when the notebook or CLI is run on
+the host; local tests inject fake engines and use existing libraries. The
+notebook now supports Colab and physical-server Jupyter environments.
 
 ## Backend selection
 
@@ -15,7 +16,7 @@ and CUDA checks; local tests inject fake engines and use existing libraries.
 |---|---|---|---|
 | Laya English/Multilingual | Existing pinned Laya encoder/collator/decoder | Existing validated fp16 AMP path | Adaptive batches |
 | Kev 0.8B/4B/9B/27B | Pinned official checkpoint loader and pointer head | fp16 requested through LoadOptions; native head retained | Serial requests |
-| NanoJev | Official DecisionPredictor from pinned checkpoint source/scripts | fp32 storage/inference, native Triton disabled | Serial requests |
+| NanoJev | Official DecisionPredictor from pinned checkpoint source/scripts | fp32 storage/inference, feature-detected native override deregistration | Serial requests |
 | Intern Decision 0.8B/2B/4B | Pinned official schema, HF backend and calibration preset | fp16 on T4; explicit backend dtype | Serial requests |
 | StartLux 4B/9B/27B | Official code from pinned model snapshot, native decide API | fp16 if constructor exposes dtype; otherwise explicit backend block on T4 | Serial requests |
 | Llama 3.1 8B, Llama 3.2 1B/3B | Full-input constrained answer-code likelihood | fp16 or explicitly recorded NF4 | Serial requests |
@@ -85,9 +86,9 @@ replaced. Laya accepts only a local checkpoint path, keeping its validated
 revision/precision policy. Public pins include the Kev base revisions, and
 checkpoint metadata must match those pins before a local base path is used.
 
-Colab installs `requirements-colab-t4.txt`, `requirements-runtime.txt` and
-`requirements-models.txt` once in the same pip call under its preinstalled torch
-version constraint. No torch/CUDA reinstall is requested. Official source is
+The notebook checks `requirements-notebook.txt` and installs only missing or
+incompatible entries in one pip call under the host's existing torch version
+constraint. No torch/CUDA reinstall is requested. Official source is
 loaded lazily after the selected model passes admission: Kev git commit
 0fe8fc97c2bcc247fa3efb6e5c32af4e99770e91 and Intern git commit
 3572c8a68b5df5dafe02d0e093989ba8ec0183bc. NanoJev/StartLux code comes from the
@@ -98,3 +99,21 @@ hashes are retained with results.
 The notebook remains configure -> run -> evaluate -> download. Evaluation keeps
 completed, failed, blocked, not-run and skipped-API rows distinct. Recorded case
 errors in a complete journal still count as wrong, per EVALUATION.md.
+
+
+## Cache-first server notebook
+
+[SERVER.md](SERVER.md) supersedes the original Colab-only environment setup.
+The notebook detects compatible installed distributions first, preserves the
+host torch version and installs only missing/incompatible requirements. Complete
+local model directories and pinned HF snapshots are preferred. Incomplete shard
+sets are not called cache hits; online mode fills missing files and strict
+offline mode reports BLOCKED_CACHE. Native git-source setup also respects
+offline mode. The whole-model disk-space estimate no longer rejects a warm
+cache before lookup. Colab temporary-cache lifetime is not made persistent by
+this code, and Google Drive is never mounted.
+
+The NanoJev wrapper detects whether torch._native and its deregistration hook
+exist before selecting disable_native_triton. With the module absent the flag
+is False; with the hook available it is True. No private module is fabricated,
+no cached upstream source is edited and no torch upgrade is required.

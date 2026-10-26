@@ -210,7 +210,7 @@ def command(args, log):
             raise
 
 
-def run_all(bank, output, models, profile="full", execute=command, options=None, model_config=None):
+def run_all(bank, output, models, profile="full", execute=command, options=None, model_config=None, cache_dir=None, offline=False):
     options = execution_options(options)
     models = model_support.select_models(models)
     expected = load_bank(bank, profile)
@@ -229,7 +229,9 @@ def run_all(bank, output, models, profile="full", execute=command, options=None,
         try:
             code = execute([sys.executable, "-u", str(HERE / "run.py"), "--model", model,
                             "--bank", str(bank), "--output", str(model_output), "--profile", profile,
-                            *option_args(options), *(["--model-config", str(model_config)] if model_config else [])], log)
+                            *option_args(options), *(["--model-config", str(model_config)] if model_config else []),
+                            *(["--cache-dir", str(cache_dir)] if cache_dir else []),
+                            *(["--offline"] if offline else [])], log)
             result["exit_code"] = code
             startup_path = model_output / "startup_status.json"
             startup = json.loads(startup_path.read_text(encoding="utf-8")) if startup_path.exists() else {}
@@ -301,17 +303,20 @@ def main():
     parser.add_argument("--models", nargs="+", default=["all"])
     parser.add_argument("--model", choices=sorted(model_support.COHORT["models"]))
     parser.add_argument("--model-config", type=Path, help="Optional JSON local paths/revisions/precision overrides")
+    parser.add_argument("--cache-dir", type=Path, help="Persistent Hugging Face hub cache; default respects HF_HUB_CACHE/HF_HOME")
+    parser.add_argument("--offline", action="store_true", default=None, help="Use complete cached/local checkpoints and native sources only")
     parser.add_argument("--profile", choices=["full", "pilot"], default="full")
     parser.add_argument("--scheduler", choices=["serial", "adaptive"], default="adaptive")
     for key, value in adaptive.DEFAULTS.items():
         parser.add_argument("--" + key.replace("_", "-"), type=type(value), default=value)
     args = parser.parse_args()
+    model_support.configure_storage(args.cache_dir, args.offline)
     options = execution_options(dict(scheduler=args.scheduler,
                                      **{k: getattr(args, k) for k in adaptive.DEFAULTS}))
     if args.model:
         run_model(args.bank.resolve(), args.output.resolve(), args.model, args.profile, options=options, overrides=model_support.load_overrides(args.model_config))
     else:
-        result = run_all(args.bank.resolve(), args.output.resolve(), args.models, args.profile, options=options, model_config=args.model_config)
+        result = run_all(args.bank.resolve(), args.output.resolve(), args.models, args.profile, options=options, model_config=args.model_config, cache_dir=args.cache_dir, offline=model_support.STORAGE["offline"])
         print("HYPOTHESIS3_FINISHED", result["status"], flush=True)
 
 

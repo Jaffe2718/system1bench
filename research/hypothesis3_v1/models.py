@@ -1,9 +1,10 @@
-"""H3 model dispatch and Colab-only checkpoint setup; no imports load weights."""
+"""H3 model dispatch and cache-first checkpoint setup; imports never load weights."""
+import importlib
 import inspect
 import json
+import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 
@@ -24,6 +25,111 @@ PARAMETERS_B = {
     "qwen3_17b": 1.7, "qwen3_8b": 8.2, "llama32_1b_public": 1.3,
     "llama32_3b_public": 3.3, "llama31_8b_instruct": 8.1,
 }
+STORAGE = dict(cache_dir=None, offline=False)
+
+
+def configure_storage(cache_dir=None, offline=None):
+    """Call before importing HF libraries; also pass cache_dir explicitly."""
+    use_offline = (os.environ.get("HF_HUB_OFFLINE", "").lower() in ("1", "true", "yes")
+                   if offline is None else bool(offline))
+    STORAGE.update(cache_dir=str(Path(cache_dir).expanduser().resolve()) if cache_dir else None,
+                   offline=use_offline)
+    if cache_dir:
+        os.environ["HF_HUB_CACHE"] = STORAGE["cache_dir"]
+    if STORAGE["offline"]:
+        os.environ["HF_HUB_OFFLINE"] = "1"
+    elif offline is not None:
+        os.environ.pop("HF_HUB_OFFLINE", None)
+
+
+def snapshot_complete(path, name):
+    """A snapshot directory alone may contain only a previous config download."""
+    root = Path(path)
+    def all_files(names):
+        return all((root / n).is_file() for n in names)
+    def tokenizer(prefix=""):
+        return all_files([prefix+"tokenizer_config.json"]) and any(
+            (root / (prefix+n)).is_file() for n in ("tokenizer.json", "tokenizer.model", "vocab.json"))
+    def weights():
+        index = root / "model.safetensors.index.json"
+        if index.is_file():
+            try:
+                names = set(json.loads(index.read_text(encoding="utf-8"))["weight_map"].values())
+                return bool(names) and all(not Path(n).is_absolute() and ".." not in Path(n).parts
+                                           and (root/n).is_file() for n in names)
+            except (ValueError, KeyError, TypeError):
+                return False
+        return (root / "model.safetensors").is_file()
+    if name in LAYA:
+        prefix = "multilingual/" if name == "multilingual" else ""
+        return all_files([prefix+n for n in ("rl_agent_config.json", "model.safetensors", "encoder/config.json")]) and tokenizer(prefix+"tokenizer/")
+    if name == "nanojev":
+        return all_files(["config.json", "best.safetensors", "backbone_config/config.json",
+                          "source/scripts/predict_toy_decisions.py", "source/scripts/train_toy_decisions.py"]) and tokenizer("tokenizer/")
+    if name.startswith("kev_"):
+        return (root/"head.pt").is_file() and (
+            all_files(["adapter_config.json", "adapter_model.safetensors"]) or
+            (all_files(["config.json"]) and weights()))
+    extra = []
+    if name.startswith("startlux_"):
+        extra = ["decision_config.json", "startlux_decision/model.py", "startlux_decision/jevfmt.py"]
+    return all_files(["config.json", *extra]) and tokenizer() and weights()
+
+
+def cached_snapshot(repo, revision, patterns, name):
+    from huggingface_hub import snapshot_download
+    options = dict(repo_id=repo, revision=revision, allow_patterns=patterns,
+                   cache_dir=STORAGE["cache_dir"])
+    try:
+        cached = snapshot_download(**options, local_files_only=True)
+    except Exception as exc:
+        if type(exc).__name__ not in ("LocalEntryNotFoundError", "CacheNotFound", "FileNotFoundError"):
+            raise
+        cached = None
+    if cached and snapshot_complete(cached, name):
+        print("MODEL_CACHE_HIT", name, repo, revision, cached, flush=True)
+        return cached
+    if STORAGE["offline"]:
+        raise ModelBlocked("BLOCKED_CACHE", f"Missing/incomplete cached snapshot: {name} {repo}@{revision}; prefetch online or supply a complete local path")
+    print("MODEL_CACHE_MISS_OR_PARTIAL", name, repo, revision, flush=True)
+    # Hub reuses existing blobs and downloads missing files. Do not reject a
+    # warm cache based on the size of an entire model or force redownload.
+    try:
+        downloaded = snapshot_download(**options, local_files_only=False)
+    except OSError as exc:
+        if exc.errno == 28:
+            raise ModelBlocked("BLOCKED_DISK", "Model cache disk is full; existing model files and results are retained") from exc
+        raise
+    if not snapshot_complete(downloaded, name):
+        raise ModelBlocked("BLOCKED_CACHE", f"Downloaded snapshot lacks required files for {name}: {downloaded}")
+    return downloaded
+
+
+def nano_triton_policy():
+    """The pinned predictor imports torch._native only when this flag is true."""
+    try:
+        native = importlib.import_module("torch._native")
+    except ModuleNotFoundError as exc:
+        if exc.name != "torch._native":
+            raise
+        return False, "torch._native absent; no private native override registry to deregister"
+    utility = getattr(native, "triton_utils", None)
+    if utility is None:
+        try:
+            utility = importlib.import_module("torch._native.triton_utils")
+        except ModuleNotFoundError as exc:
+            if exc.name != "torch._native.triton_utils":
+                raise
+            raise ModelBlocked("BLOCKED_BACKEND", "torch._native exists without a supported triton_utils API") from exc
+    if not callable(getattr(utility, "deregister_op_overrides", None)):
+        raise ModelBlocked("BLOCKED_BACKEND", "Native Triton override registry has no deregister_op_overrides API")
+    return True, "private native override deregistration API available"
+
+
+def make_nano_predictor(predictor_class, path):
+    disable, reason = nano_triton_policy()
+    model = predictor_class(path, max_length=8192, precision="fp32", disable_native_triton=disable)
+    return model, disable, reason
 
 
 class ModelBlocked(RuntimeError):
@@ -83,12 +189,16 @@ def ensure_vendor(family):
     url, revision, folder = VENDORS[family]
     target = ROOT / ".aris/vendor" / folder
     if not (target / ".git").exists():
+        if STORAGE["offline"]:
+            raise ModelBlocked("BLOCKED_CACHE", "Pinned native source missing in offline mode: " + str(target))
         target.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", str(target)], check=True)
         subprocess.run(["git", "-C", str(target), "remote", "add", "origin", url], check=True)
     head = subprocess.run(["git", "-C", str(target), "rev-parse", "--verify", "HEAD"],
                           capture_output=True, text=True)
     if head.returncode:
+        if STORAGE["offline"]:
+            raise ModelBlocked("BLOCKED_CACHE", "Pinned native source checkout incomplete in offline mode: " + str(target))
         # A previous interrupted fetch leaves an initialized repo without HEAD;
         # retry it rather than poisoning every later model of the same family.
         subprocess.run(["git", "-C", str(target), "fetch", "--depth", "1", "origin", revision], check=True)
@@ -103,24 +213,36 @@ def ensure_vendor(family):
 
 
 def prepare_checkpoint(name, override):
-    from huggingface_hub import HfApi, snapshot_download
+    from huggingface_hub import HfApi
     pin = dict(COHORT["models"][name])
     pin.update({k:v for k,v in override.items() if k != "precision"})
     if "path" not in pin:
         revision = pin["revision"]
         if not re.fullmatch(r"[0-9a-f]{40}", revision):
-            # Historical Llama pin is only a local-file-hash receipt. Resolve and
-            # explicitly mark the new revision; never claim historical equality.
+            if STORAGE["offline"]:
+                raise ModelBlocked("BLOCKED_CACHE", "Offline mode needs an explicit immutable revision or local path for " + name)
             pin["historical_revision"] = revision
             pin["revision"] = HfApi().model_info(pin["repo"]).sha
             pin["historical_match_verified"] = False
-        pin["path"] = snapshot_download(pin["repo"], revision=pin["revision"],
-            allow_patterns=["*.json", "*.safetensors", "*.pt", "*.model", "*.txt", "*.jinja", "*.py", "LICENSE*", "NOTICE*"])
-    if not Path(pin["path"]).is_dir():
-        raise FileNotFoundError(pin["path"])
-    if "base_repo" in pin and "base_path" not in pin:
-        pin["base_path"] = snapshot_download(pin["base_repo"], revision=pin["base_revision"],
-            allow_patterns=["*.json", "*.safetensors", "*.model", "*.txt", "*.jinja"])
+        if name in LAYA:
+            patterns = (["multilingual/**"] if name == "multilingual" else
+                        ["encoder/**", "tokenizer/**", "model.safetensors", "rl_agent_config.json"])
+        else:
+            patterns = ["*.json", "*.safetensors", "*.pt", "*.model", "*.txt", "*.jinja", "*.py", "LICENSE*", "NOTICE*"]
+        pin["path"] = cached_snapshot(pin["repo"], pin["revision"], patterns, name)
+    else:
+        pin["path"] = str(Path(pin["path"]).expanduser().resolve())
+        if not snapshot_complete(pin["path"], name):
+            raise ModelBlocked("BLOCKED_CACHE", "Supplied local checkpoint is incomplete for " + name + ": " + pin["path"])
+        print("MODEL_LOCAL_PATH", name, pin["path"], flush=True)
+    if "base_repo" in pin:
+        if "base_path" not in pin:
+            pin["base_path"] = cached_snapshot(pin["base_repo"], pin["base_revision"],
+                ["*.json", "*.safetensors", "*.model", "*.txt", "*.jinja"], "base")
+        else:
+            pin["base_path"] = str(Path(pin["base_path"]).expanduser().resolve())
+            if not snapshot_complete(pin["base_path"], "base"):
+                raise ModelBlocked("BLOCKED_CACHE", "Supplied local base checkpoint is incomplete: " + pin["base_path"])
     return pin
 
 
@@ -182,7 +304,8 @@ class NativeBridge:
                 backend="hf", device="cuda", dtype=precision, attn_implementation="sdpa")
         elif name == "nanojev":
             from predict_toy_decisions import DecisionPredictor
-            engine.model = DecisionPredictor(path, max_length=8192, precision="fp32", disable_native_triton=True)
+            engine.model, disable, reason = make_nano_predictor(DecisionPredictor, path)
+            engine.metadata.update(disable_native_triton=disable, native_triton_compatibility=reason)
         else:
             from startlux_decision.model import StartLuxDecision
             options = dict(device="cuda", max_length=8192, graphs=False, images=False)
@@ -319,18 +442,17 @@ def create_adapter(name, overrides=None):
         override = (overrides or {}).get(name,{})
         if set(override)-{"path"}:
             raise ValueError("Laya keeps its validated model/precision policy; only local path override supported")
-        return LayaAdapter(name, override.get("path"))
+        pin = prepare_checkpoint(name, override)
+        return LayaAdapter(name, pin["path"])
     import torch
     override=(overrides or {}).get(name,{})
     free,_=torch.cuda.mem_get_info()
     precision=memory_policy(name,free/2**30,override.get("precision","auto"),torch.cuda.is_bf16_supported())
-    # Check disk before a multi-gigabyte transfer. Metadata/code downloads only
-    # start after GPU admission; user weights are never deleted to make room.
-    if "path" not in override and shutil.disk_usage(ROOT).free < PARAMETERS_B.get(name,1)*2e9+2e9:
-        raise ModelBlocked("BLOCKED_DISK", "Insufficient free disk for pinned checkpoint; retain earlier results")
     try:
         pin=prepare_checkpoint(name,override)
     except Exception as exc:
+        if isinstance(exc, OSError) and getattr(exc, "errno", None) == 28:
+            raise ModelBlocked("BLOCKED_DISK", "Model cache disk is full; earlier results are retained") from exc
         if type(exc).__name__ in ("GatedRepoError","RepositoryNotFoundError"):
             raise ModelBlocked("BLOCKED_ACCESS", "Hugging Face checkpoint unavailable or requires authorized HF credentials") from exc
         raise

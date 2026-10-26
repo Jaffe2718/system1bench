@@ -80,9 +80,10 @@ All upstream files have exact SHA256 pins in the independent `sources.json`.
 
 ## T4 collection
 
-The dedicated notebook has exactly four code steps: configure, collect, evaluate, download.
-It uses Colab's Python/PyTorch and one dependency install, with no Drive or smoke
-inference. Each model loads once in a separate process and immediately starts this
+The dedicated notebook has exactly four code steps: configure, collect, evaluate, download/package.
+It runs on Colab or a physical-server Jupyter kernel, reuses the host's CUDA
+PyTorch and compatible dependencies, and invokes pip only for missing/incompatible
+requirements. There is no Drive or smoke inference. Each model loads once in a separate process and immediately starts this
 bank. The default queue is all 22 established local models, excluding Jev API.
 Native families use their official interfaces; Llama/Qwen controls use coded
 likelihood baselines. New backend code requires Colab validation. Memory,
@@ -146,3 +147,17 @@ qualifying samples (about 16 seconds) before growing a Laya batch. It measures
 RAM/GPU memory; other model adapters currently run serial complete requests.
 No Windows dependency installation or model-weight download is part of local
 verification.
+
+
+## Reuse a server environment and HF model cache
+
+See [SERVER.md](SERVER.md). In the notebook, set HF_CACHE_DIR to the server's
+existing persistent Hub cache, or keep None to respect its existing settings.
+MODEL_OVERRIDES can point to already downloaded local model/base directories.
+ALLOW_MODEL_DOWNLOADS=False and CLI --offline forbid checkpoint/source fetching;
+missing or partial cached files receive BLOCKED_CACHE. --cache-dir selects the
+same persistent cache for every child model process, including Laya and Kev bases.
+
+NanoJev no longer unconditionally asks its pinned predictor to import the
+optional torch._native private API. The feature-detected flag/reason is recorded,
+without changing the installed PyTorch or upstream checkpoint source.

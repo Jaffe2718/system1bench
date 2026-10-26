@@ -1,9 +1,10 @@
 # Hypothesis 3 collection protocol v1
 
-Status: data bank and prediction collection only. **Evaluation is not frozen.**
-No score, ranking, optimal K, significance claim or mechanism conclusion is
-computed by the collection notebook. A later protocol version will define the
-evaluation step before confirmatory interpretation.
+Status: frozen bank and collection policy, plus versioned CPU evaluation.
+[EVALUATION.md](EVALUATION.md) defines the new configure -> collect -> evaluate ->
+download flow. The evaluation rule was written after viewing the first Laya run;
+that run remains exploratory. The collector itself preserves raw outputs without
+scoring; the separate evaluation step computes the reported metrics.
 
 ## Question bank
 
@@ -34,8 +35,8 @@ or smoke stage automatically. The same frozen inputs must be supplied to all mod
 Multiselect uses complete original MultiRC questions with K=3/4/5 and 2 <= number
 of positives < K. No gold count is provided to the model. It is a separate task,
 not a fifth level of single-choice K. The complete option set accompanies each
-candidate-specific noul question. Probability-to-set rules and performance
-metrics remain open for later evaluation; native outputs are retained.
+candidate-specific noul question. Native outputs are retained. Evaluation v1 fixes the original 0.5 threshold and
+reports exact-set agreement, set F1 and explicit baselines; see EVALUATION.md.
 
 ## Integrity and failure policy
 
@@ -54,7 +55,7 @@ portability. The frozen original experiments are neither modified nor extended.
 
 - Import the collaborator's final hypothesis-1/2 source-ID/context exclusion lists.
 - Review ambiguity and distractor quality independently of tested model outcomes.
-- Decide per-K comparison, random baselines, probability and multiselect metrics.
+- Validate the versioned EVALUATION.md choices before claiming confirmatory results.
 - Decide treatment of missing/invalid model outputs and incomplete input audits.
 - Specify paired/group-level uncertainty, multiple comparisons and the rule, if
   any, for selecting a preferred K from development data.
@@ -95,8 +96,7 @@ batch IDs, actual shapes, forward durations and retries. Each raw prediction
 records its execution batch. The inference_seconds field is the row-weighted
 share of successful batch forward time, not per-request latency; failed attempts,
 CPU preparation and decoding are excluded. Use model start/finish timestamps
-for end-to-end speed comparisons. Raw answers and evaluation-deferred behavior
-are unchanged. Floating-point output may differ with batch shape, so adaptive
+for end-to-end speed comparisons. Raw answers are unchanged; scoring runs in a separate CPU-only evaluation step. Floating-point output may differ with batch shape, so adaptive
 runs use a fresh directory/signature and must not be merged with serial journals.
 
 Use --scheduler serial to retain sequential calls. Adaptive settings are CLI

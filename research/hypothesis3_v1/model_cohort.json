@@ -1,0 +1,100 @@
+{
+  "source": "research/evaluation_completion_v3/manifest.json",
+  "models": {
+    "kev_08b": {
+      "repo": "jaredpalmer/kev-0.8b",
+      "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e"
+    },
+    "kev_4b": {
+      "repo": "jaredpalmer/kev-4b",
+      "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101"
+    },
+    "kev_9b": {
+      "repo": "jaredpalmer/kev-9b",
+      "revision": "2629c06a5aeb0feb3b9783bafed17ed8f39ecf5c"
+    },
+    "nanojev": {
+      "repo": "C-Tianyu/NanoJev",
+      "revision": "047b927b30882a1138fc504821b82ac145a4b81a"
+    },
+    "qwen35_9b": {
+      "repo": "Qwen/Qwen3.5-9B",
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+    },
+    "kev_27b": {
+      "repo": "jaredpalmer/kev-27b",
+      "revision": "af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf"
+    },
+    "qwen35_08b": {
+      "repo": "Qwen/Qwen3.5-0.8B",
+      "revision": "2fc06364715b967f1860aea9cf38778875588b17"
+    },
+    "qwen35_4b": {
+      "repo": "Qwen/Qwen3.5-4B",
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+    },
+    "qwen38_27b": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "startlux_4b": {
+      "repo": "startlux-models/StartLux-Decision-4B",
+      "revision": "9302aedb7f7bd889994336f2ae919dffbf5dbee1"
+    },
+    "startlux_9b": {
+      "repo": "startlux-models/StartLux-Decision-9B",
+      "revision": "342aad64840be8eee314455428a5a775f18ef547"
+    },
+    "startlux_27b": {
+      "repo": "startlux-models/StartLux-Decision-27B",
+      "revision": "95e31cda814fec2a7dc4ac4f8b9b832aa1c9c2e6"
+    },
+    "intern_4b": {
+      "repo": "internlm/Intern-Decision-4B",
+      "revision": "0e5e6aa7d6d750e2b1504ba11a8136cb58aeb3cd"
+    },
+    "llama32_1b_public": {
+      "repo": "unsloth/Llama-3.2-1B-Instruct",
+      "revision": "5a8abab4a5d6f164389b1079fb721cfab8d7126c"
+    },
+    "intern_08b": {
+      "repo": "internlm/Intern-Decision-0.8B",
+      "revision": "85a0cc5a99d67ea8d56dfe98115689212867171d"
+    },
+    "llama32_3b_public": {
+      "repo": "unsloth/Llama-3.2-3B-Instruct",
+      "revision": "006f5dcd1393c3add266de40994ba96225e9689d"
+    },
+    "intern_2b": {
+      "repo": "internlm/Intern-Decision-2B",
+      "revision": "8797836c65fc91a2435b1fb6850b5f0aabd75cc3"
+    },
+    "qwen3_8b": {
+      "repo": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+    },
+    "qwen3_17b": {
+      "repo": "Qwen/Qwen3-1.7B",
+      "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+    },
+    "english": {
+      "repo": "convaiinnovations/laya",
+      "revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
+    },
+    "multilingual": {
+      "repo": "convaiinnovations/laya",
+      "revision": "55cf4c4ebb4ebe31b2550e8bdf3bd21b99753851"
+    },
+    "llama31_8b_instruct": {
+      "repo": "meta-llama/Llama-3.1-8B-Instruct",
+      "revision": "local_snapshot_identified_by_file_hashes"
+    },
+    "jev-1.13.0": {
+      "repo": "https://api.typesafe.ai/v1/systemone",
+      "revision": "jev-1.13.0"
+    }
+  },
+  "skip_api": [
+    "jev-1.13.0"
+  ]
+}

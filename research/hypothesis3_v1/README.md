@@ -2,9 +2,11 @@
 
 [Open the dedicated T4 notebook](https://colab.research.google.com/github/Jaffe2718/system1bench/blob/main/notebooks/hypothesis3_t4.ipynb)
 
-Current workflow: **configure -> run questions -> download**. Research evaluation
-is deliberately deferred. No accuracy, chance-adjusted score, F1, best-K estimate,
-or model ranking is produced. Runtime errors and input audits are diagnostics.
+Current workflow: **configure -> run questions -> evaluate -> download**.
+CPU evaluation reports chance-adjusted single-choice scores, raw accuracy,
+cluster intervals and separate multiselect metrics/baselines. It also reports
+the full established model cohort's missing runs. See [EVALUATION.md](EVALUATION.md)
+for the versioned rule and reuse of historical result ZIPs; no model reload is needed.
 
 ## Frozen bank
 
@@ -78,7 +80,7 @@ All upstream files have exact SHA256 pins in the independent `sources.json`.
 
 ## T4 collection
 
-The dedicated notebook has exactly three code steps: configure, collect, download.
+The dedicated notebook has exactly four code steps: configure, collect, evaluate, download.
 It uses Colab's Python/PyTorch and one dependency install, with no Drive or smoke
 inference. Each model loads once in a separate process and immediately starts this
 bank. Default models are Laya English and Multilingual; other S1 models require
@@ -99,7 +101,7 @@ not research performance. `predictions.jsonl` retains probabilities, native raw
 answers, derived IDs, references, group IDs, condition aliases and token audits.
 
 The download contains the exact bank, source/builder receipts, runner code, runtime
-versions and logs so evaluation can be designed after inspecting the returned data.
+versions, logs and the evaluation directory for reproducible inspection.
 Original data terms remain in force; see `NOTICE.md`.
 
 
@@ -113,5 +115,20 @@ the prior per-request path.
 
 The fixed bank is unchanged. New outputs include adaptive_events.jsonl and
 per-request batch metadata; use a fresh output directory. The notebook retains
-configure -> collect -> download, Colab's installed torch, and no smoke/Drive.
+configure -> collect -> evaluate -> download, Colab's installed torch, and no smoke/Drive.
 See PROTOCOL.md for the complete memory, retry, timing and numerical policy.
+
+
+## Evaluation without rerunning models
+
+The evaluator supports any model using the H3 journal contract. The existing
+inference CLI still supports Laya English/Multilingual; the other established
+models are explicitly NOT_RUN until their H3 collection adapters are added.
+Jev API is skipped by default; NanoJev remains included in the cohort.
+
+Run the historical ZIP directly on CPU:
+
+    python research/hypothesis3_v1/evaluate.py --results hypothesis3-t4-results.zip --output h3-evaluation
+
+The notebook's third cell performs the same evaluation on the current run.
+The fourth cell packages raw predictions and evaluation reports/tables together.

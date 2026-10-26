@@ -1,0 +1,81 @@
+{
+  "version": "hypothesis3-bank-receipt-v1",
+  "status": "BUILT_FOR_REVIEW",
+  "model_calls": 0,
+  "evaluation_performed": false,
+  "builder_sha256": "04c00c321cb9e15f3f826b0b4386ead43b4b6133f013b62ad8af11289279cf82",
+  "source_catalog_sha256": "115b7607a1e8d95040ece7033b9e21ccf0e0e80e0df7d0400a4e1a6fbe7aed99",
+  "manifest_sha256": "0ee418e0b89cd810aa6df1aa557502a34f4191a858ccc2f4a03de001ff827a72",
+  "files": {
+    "native.jsonl": {
+      "sha256": "040f835fc34e547b877ff750a8b0885db95f4cf55c3411a6e8073cf3f2faa65e",
+      "requests": 1600,
+      "decisions": 1600,
+      "bases": 800
+    },
+    "paired.jsonl": {
+      "sha256": "89f910488045fd328048bd3eedf888efa7951f0891b3e25aaa246facd705c7e1",
+      "requests": 9569,
+      "decisions": 9569,
+      "bases": 600
+    },
+    "multi_select.jsonl": {
+      "sha256": "ec3bad2e75e8e623f70f0c853c6c2df6d4c482d0ef2d3b8c2d7b41ebbbf6a229",
+      "requests": 400,
+      "decisions": 1598,
+      "bases": 200
+    },
+    "mothers.jsonl": {
+      "sha256": "b12e511b965374ea19722f979ad8943ec1275fe3a4037e53b06be7ddb17d114c",
+      "rows": 1400
+    },
+    "pilot_base_ids.json": {
+      "sha256": "844e665f4acdc24253bc528e9a0d18254b4862780fb382e722cfb26ad67a7894"
+    },
+    "exclusions.json": {
+      "sha256": "6f1bd2864974dbf1adc31f4b94f6eb308f1ce817fccdf1affe7677cd227574aa"
+    },
+    "audit.json": {
+      "sha256": "16c0da93db8ee1974477a702e8e5c91ff63b3a976b2ba0b38cd245f3f46f9892"
+    }
+  },
+  "audit": {
+    "status": "PASS",
+    "requests": 11569,
+    "decisions": 12767,
+    "unique_bases": 1600,
+    "source_groups": 1460,
+    "panel_requests": {
+      "native": 1600,
+      "paired": 9569,
+      "multi_select": 400
+    },
+    "panel_k_requests": {
+      "native/K=2": 400,
+      "native/K=3": 400,
+      "native/K=4": 400,
+      "native/K=5": 400,
+      "paired/K=2": 2400,
+      "paired/K=3": 2400,
+      "paired/K=4": 2400,
+      "paired/K=5": 2369,
+      "multi_select/K=3": 134,
+      "multi_select/K=4": 134,
+      "multi_select/K=5": 132
+    },
+    "split_requests": {
+      "confirmation": 9257,
+      "development": 2312
+    },
+    "excluded_source_ids": 6000,
+    "excluded_text_groups": 5774,
+    "legacy_overlap": 0,
+    "cross_panel_group_overlap": 0,
+    "development_confirmation_group_overlap": 0,
+    "hypothesis1_2_final_exclusions": "NOT_PROVIDED",
+    "external_exclusion_receipts": [],
+    "human_semantic_review": "PENDING; no new distractor text was generated"
+  },
+  "legacy_exclusions_verified_against": "Exactly matched 6,000 source IDs from the completed main benchmark run at 86756a7",
+  "rebuild_verified": "Byte-identical independent offline rebuild from all 11 pinned files; no access to old experiment root"
+}

@@ -1,0 +1,5 @@
+{
+  "description": "Replace with the collaborator's final frozen source IDs and/or build.group_hash(context) values. Empty example is not an exclusion receipt.",
+  "source_ids": [],
+  "group_sha256": []
+}

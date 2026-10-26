@@ -72,10 +72,10 @@ weights are loaded once, and models run in separate sequential processes.
 
 Initial capacity is at most 8 encoded question rows (reduced to 4 or 1 when
 initial free GPU memory is below 6 or 3 GiB). The cap grows by 1.5x only after
-16 consecutive active samples, 2 seconds apart, with both host RAM and effective
+64 consecutive active samples, 0.25 seconds apart, with both host RAM and effective
 GPU memory below 70%. Effective memory includes global GPU usage and the
 inter-sample reserved-memory peak, rather than only idle allocations. At 85%
-usage or less than 2 GiB free GPU memory the cap halves; growth pauses for 16
+usage or less than 2 GiB free GPU memory the cap halves; growth pauses for 64
 samples. Capacity is capped at 128 question rows and 32,768 padded tokens per
 batch. A single request remains atomic, including all multiselect question heads.
 These are memory heuristics, not a guarantee of maximum throughput or OOM avoidance.
@@ -104,3 +104,9 @@ options (for example --initial-batch-rows 4 --max-batch-rows 64) and notebook
 configuration entries. The notebook still installs dependencies once while
 constraining torch to Colab's installed version; psutil is the added monitoring
 dependency. Local scheduling/failure tests do not establish T4 speedup.
+
+
+The new full-cohort collection entry is described in COMPATIBILITY.md. Laya
+retains adaptive batches; other families use separate serial native/baseline
+interfaces. Precision/quantization policies and hardware/access blocks are
+explicitly recorded and must not be pooled as identical historical conditions.

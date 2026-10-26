@@ -256,14 +256,16 @@ def evaluate(results_path, output, bank_path=None, repetitions=2000, seed=202610
         models=set(cohort["models"])|results.models()|set(run_status.get("models",{}))
         coverage,singles,multi,contrasts=[],[],[],[]
         for model in sorted(models):
-            entry=dict(model=model,status="NOT_RUN",expected_requests=len(bank),saved_requests=0,invalid_requests=0,reason="")
+            entry=dict(model=model,status="NOT_RUN",expected_requests=len(bank),saved_requests=0,invalid_requests=0,reason="",precision="",quantized="",adapter="")
             coverage.append(entry)
             if model=="jev-1.13.0" and not results.exists(model+"/metadata.json"):
                 entry.update(status="SKIPPED_API",reason="Jev API excluded by user; NanoJev remains in cohort")
                 continue
             if not results.exists(model+"/metadata.json"):
-                if run_status.get("models",{}).get(model,{}).get("status")=="FAILED":
-                    entry.update(status="FAILED",reason="Collection process failed; no complete metadata")
+                collected = run_status.get("models",{}).get(model,{})
+                state = collected.get("status", "")
+                if state == "FAILED" or state.startswith("BLOCKED_") or state == "SKIPPED_API":
+                    entry.update(status=state,reason=collected.get("reason","Collection process failed; no complete metadata"))
                 continue
             try:
                 saved,valid,meta=validate_predictions(results,bank,manifest_sha,model,profile)
@@ -271,6 +273,10 @@ def evaluate(results_path, output, bank_path=None, repetitions=2000, seed=202610
                 mult=multi_scores(model,bank,saved,valid,repetitions,seed)
                 singles.extend(rows);contrasts.extend(differences);multi.extend(mult)
                 invalid=sum(not v for v in valid.values())
+                runtime=meta["signature"].get("model", {})
+                entry.update(precision=str(runtime.get("dtype","unspecified")),
+                             quantized=runtime.get("quantized",False) if "dtype" in runtime else "",
+                             adapter=runtime.get("adapter","unspecified"))
                 entry.update(status="COMPLETE_WITH_INVALID" if invalid else "COMPLETE",
                              saved_requests=len(saved),invalid_requests=invalid)
             except Exception as exc:
@@ -301,6 +307,7 @@ def evaluate(results_path, output, bank_path=None, repetitions=2000, seed=202610
                     models_evaluated=sum(e["status"].startswith("COMPLETE") for e in coverage),
                     models_not_run=sum(e["status"]=="NOT_RUN" for e in coverage),
                     models_unevaluable=sum(e["status"] in ("UNEVALUABLE","FAILED") for e in coverage),
+                    models_blocked=sum(e["status"].startswith("BLOCKED_") for e in coverage),
                     collection_status=run_status.get("status","UNKNOWN"),summary_sha256=sha((output/"summary.json").read_bytes()))
         (output/"status.json").write_text(json.dumps(status,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
         return summary
@@ -329,10 +336,10 @@ def render_report(summary):
             lines.append(f"| {r['model']} | {r['mothers']} | {100*r['exact_match']:.2f}% | {100*r['macro_set_f1']:.2f}% | {100*r['all_selected_rate']:.2f}% | {100*r['all_selected_baseline_f1']:.2f}% | {r['fair_coin_adjusted_em_score']:.2f} |")
     lines += ["", "多选随机策略明确为每个候选独立以 0.5 概率勾选，整题基线为 2^(−K)，不是 1/K。",
               "去基线 EM 在每题内计算再平均；不与单选校正分合并排名。不同 K 的多选题不是同一批母题。", "",
-              "## 模型覆盖", "", "| 模型 | 状态 | 无效请求 | 原因 |", "|---|---|---:|---|"]
+              "## 模型覆盖", "", "| 模型 | 状态 | 精度 | 量化 | 无效请求 | 原因 |", "|---|---|---|---|---:|---|"]
     for r in summary["coverage"]:
         reason=r["reason"].replace("|","/").replace("\n"," ")
-        lines.append(f"| {r['model']} | {r['status']} | {r['invalid_requests']} | {reason} |")
+        lines.append(f"| {r['model']} | {r['status']} | {r['precision']} | {r['quantized']} | {r['invalid_requests']} | {reason} |")
     lines += ["", "完整日志中已记录的失败/不完整输入按错误计分；缺失或损坏的模型日志不评分，不丢弃后只报告成功题。",
               f"区间采用 {protocol['bootstrap_repetitions']} 次按来源分层、按上下文簇重采样；同母题各 K 保持配对。",
               "区间未作多重比较校正；本方法在已有 Laya 结果之后制定，该批仍属于探索性分析。",

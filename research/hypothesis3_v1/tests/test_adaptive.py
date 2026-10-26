@@ -65,22 +65,22 @@ def collect(inputs, engine, events=None, **options):
 
 
 class AdaptiveTests(unittest.TestCase):
-    def test_sixteen_consecutive_active_samples_and_reset(self):
+    def test_sixty_four_consecutive_active_samples_and_reset(self):
         c = adaptive.Controller(dict(adaptive.DEFAULTS))
         low = dict(ram_ratio=.2, gpu_ratio=.3, gpu_free=10 * 2**30,
                    completed_batches=1, backlog=10)
-        for _ in range(15):
+        for _ in range(63):
             c.observe(low)
         self.assertEqual(c.limit(), 8)
         c.observe(dict(low, gpu_ratio=.71))
-        for _ in range(15):
+        for _ in range(63):
             c.observe(low)
         self.assertEqual(c.limit(), 8)
         c.observe(low)
         self.assertEqual(c.limit(), 12)
         c.observe(dict(low, ram_ratio=.86))
         self.assertEqual(c.limit(), 6)
-        for _ in range(31):
+        for _ in range(127):
             c.observe(low)
         self.assertEqual(c.limit(), 6)
         c.observe(low)
@@ -93,7 +93,7 @@ class AdaptiveTests(unittest.TestCase):
         for _ in range(100):
             c.observe(low)
         self.assertEqual(c.limit(), 8)
-        for _ in range(32):
+        for _ in range(128):
             c.observe(dict(low, completed_batches=1))
         self.assertEqual(c.limit(), 9)
 

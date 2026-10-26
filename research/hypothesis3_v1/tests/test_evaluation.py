@@ -152,6 +152,19 @@ class EvaluationTests(unittest.TestCase):
         self.assertTrue(np.array_equal(draws[:,0],draws[:,1]))
         self.assertTrue(np.all(draws==.5))  # both cluster means are .5
 
+    def test_resource_block_is_reported_without_zero_model_score(self):
+        with tempfile.TemporaryDirectory(dir=build.ROOT) as tmp:
+            root=Path(tmp);bank,result,rows=fixture(root)
+            save_model(result,bank,rows)
+            build.dump(result/'run_status.json',dict(profile='full',status='FINISHED_WITH_ERRORS',models={
+                'english':{'status':'OK'},
+                'kev_27b':{'status':'BLOCKED_RESOURCE','reason':'larger GPU required'}}))
+            summary=evaluate.evaluate(result,root/'evaluation',bank,repetitions=100)
+            blocked=next(r for r in summary['coverage'] if r['model']=='kev_27b')
+            self.assertEqual(blocked['status'],'BLOCKED_RESOURCE')
+            self.assertEqual(blocked['reason'],'larger GPU required')
+            self.assertFalse(any(r['model']=='kev_27b' for r in summary['single_choice']))
+
 
 if __name__=='__main__':
     unittest.main()

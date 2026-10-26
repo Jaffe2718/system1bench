@@ -77,10 +77,12 @@ Missing model runs have no scores; they are not assigned zero performance.
 results actually exist; NanoJev remains a local model. Discover any additional
 model directories and evaluate them using the same H3 output contract.
 
-The evaluator is model-independent. This does not add inference adapters for the
-20 models currently missing H3 runs: the collection CLI still supports the two
-Laya variants. Adding full-cohort collection, including large-model T4 execution
-policies, is separate work; NOT_RUN rows make this gap explicit.
+The evaluator is model-independent. The collection CLI now queues all 22 local
+models through the adapters described in COMPATIBILITY.md. Code compatibility
+does not imply successful T4 execution: BLOCKED_RESOURCE/BACKEND/DISK/ACCESS,
+FAILED, NOT_RUN and SKIPPED_API stay distinct. Precision and quantization are
+included in coverage tables; native and NF4 baseline results must retain their
+different execution conditions.
 
 Collector metadata retains `evaluation_performed=False`: it describes the raw
 collection stage and remains immutable. Evaluation writes its own protocol,

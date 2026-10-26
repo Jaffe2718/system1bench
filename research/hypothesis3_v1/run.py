@@ -1,4 +1,4 @@
-"""Collect hypothesis 3 predictions and failures. Research evaluation is deferred."""
+"""Collect hypothesis 3 predictions and failures. Evaluation runs in a separate CPU step."""
 import argparse
 import csv
 import json
@@ -15,6 +15,7 @@ sys.path.insert(0, str(HERE))
 
 import build
 import adaptive
+import models as model_support
 from system1bench.common import decode, labels
 from system1bench.run import evaluate_batch, failed_audit
 
@@ -94,23 +95,37 @@ def journal_rows(path, wanted):
     return saved
 
 
-def run_model(bank, output, model, profile="full", adapter_factory=None, options=None):
+def run_model(bank, output, model, profile="full", adapter_factory=None, options=None, overrides=None):
     options = execution_options(options)
     rows = load_bank(bank, profile)
     output.mkdir(parents=True, exist_ok=True)
     metadata_path = output / "metadata.json"
     old = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.exists() else None
+    requested_options = dict(options)
+    if model not in model_support.LAYA:
+        options = dict(scheduler="serial")
     if adapter_factory is None:
-        from system1bench.laya_adapter import LayaAdapter
-        adapter_factory = LayaAdapter
+        adapter_factory = lambda name: model_support.create_adapter(name, overrides)
     # Each model is constructed once, in its own process. No separate smoke call.
-    adapter = adapter_factory(model)
+    build.dump(output / "startup_status.json", dict(status="STARTING", model=model))
+    try:
+        adapter = adapter_factory(model)
+    except model_support.ModelBlocked as exc:
+        result = dict(status=exc.status, model=model, reason=str(exc))
+        build.dump(output / "startup_status.json", result)
+        print("MODEL_BLOCKED", model, exc.status, str(exc), flush=True)
+        return result
+    build.dump(output / "startup_status.json", dict(status="READY", model=model))
     signature = dict(bank_manifest_sha256=build.file_sha(bank / "manifest.json"), profile=profile,
-                     source_sha256={p.name: build.text_sha(p) for p in (HERE / "build.py", HERE / "run.py", HERE / "adaptive.py")},
+                     source_sha256={p.name: build.text_sha(p) for p in (HERE / "build.py", HERE / "run.py", HERE / "adaptive.py", HERE / "models.py", HERE / "model_cohort.json")},
                      adapter_sha256=build.text_sha(ROOT / "system1bench/laya_adapter.py"),
+                     compatibility_sha256={str(p.relative_to(ROOT)):build.text_sha(p) for p in
+                         (ROOT / "system1bench/decision_models.py", ROOT / "system1bench/llm_adapter.py",
+                          ROOT / "research/model_expansion_v2/adapter.py", ROOT / "research/model_expansion_v3/adapter.py",
+                          ROOT / "research/startlux_transfer_v1/adapter.py") if p.is_file()},
                      common_sha256=build.text_sha(ROOT / "system1bench/common.py"),
                      runner_sha256=build.text_sha(ROOT / "system1bench/run.py"),
-                     model=adapter.metadata, budget=dict(max_len=8192, head_max_len=4096), execution=options,
+                     model=adapter.metadata, budget=dict(max_len=8192, head_max_len=4096), execution=options, requested_execution=requested_options,
                      inference_seconds_semantics=("row-weighted share of successful CUDA batch forward time; "
                                                  "excludes CPU preparation, decoding and retry overhead"
                                                  if options["scheduler"] == "adaptive" else "serial predict call"),
@@ -195,8 +210,9 @@ def command(args, log):
             raise
 
 
-def run_all(bank, output, models, profile="full", execute=command, options=None):
+def run_all(bank, output, models, profile="full", execute=command, options=None, model_config=None):
     options = execution_options(options)
+    models = model_support.select_models(models)
     expected = load_bank(bank, profile)
     output.mkdir(parents=True, exist_ok=True)
     summary = dict(status="RUNNING", experiment="hypothesis3-v1", profile=profile,
@@ -213,8 +229,15 @@ def run_all(bank, output, models, profile="full", execute=command, options=None)
         try:
             code = execute([sys.executable, "-u", str(HERE / "run.py"), "--model", model,
                             "--bank", str(bank), "--output", str(model_output), "--profile", profile,
-                            *option_args(options)], log)
+                            *option_args(options), *(["--model-config", str(model_config)] if model_config else [])], log)
             result["exit_code"] = code
+            startup_path = model_output / "startup_status.json"
+            startup = json.loads(startup_path.read_text(encoding="utf-8")) if startup_path.exists() else {}
+            if code == 0 and (startup.get("status", "").startswith("BLOCKED_") or startup.get("status") == "SKIPPED_API"):
+                result.update(status=startup["status"], reason=startup["reason"], completed_requests=0, failed_requests=0)
+                build.dump(output / "run_status.json", summary)
+                print("MODEL_RESULT", model, result["status"], flush=True)
+                continue
             path = model_output / "metadata.json"
             meta = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
             rows = journal_rows(model_output / "predictions.jsonl", {r["id"]: r for r in expected})
@@ -249,9 +272,9 @@ def run_all(bank, output, models, profile="full", execute=command, options=None)
                 for line in path.read_text(encoding="utf-8").splitlines():
                     writer.writerow(json.loads(line))
             result = summary["models"][model]
-            if result["status"] == "FAILED":
-                writer.writerow(dict(model=model, stage="model", error="ModelFailed",
-                                     message=result.get("error", result.get("log_tail", result["log"]))))
+            if result["status"] == "FAILED" or result["status"].startswith("BLOCKED_"):
+                writer.writerow(dict(model=model, stage="model", error=result["status"],
+                                     message=result.get("reason", result.get("error", result.get("log_tail", result["log"])))))
     return summary
 
 
@@ -275,8 +298,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bank", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--models", nargs="+", choices=["english", "multilingual"], default=["english", "multilingual"])
-    parser.add_argument("--model", choices=["english", "multilingual"])
+    parser.add_argument("--models", nargs="+", default=["all"])
+    parser.add_argument("--model", choices=sorted(model_support.COHORT["models"]))
+    parser.add_argument("--model-config", type=Path, help="Optional JSON local paths/revisions/precision overrides")
     parser.add_argument("--profile", choices=["full", "pilot"], default="full")
     parser.add_argument("--scheduler", choices=["serial", "adaptive"], default="adaptive")
     for key, value in adaptive.DEFAULTS.items():
@@ -285,9 +309,9 @@ def main():
     options = execution_options(dict(scheduler=args.scheduler,
                                      **{k: getattr(args, k) for k in adaptive.DEFAULTS}))
     if args.model:
-        run_model(args.bank.resolve(), args.output.resolve(), args.model, args.profile, options=options)
+        run_model(args.bank.resolve(), args.output.resolve(), args.model, args.profile, options=options, overrides=model_support.load_overrides(args.model_config))
     else:
-        result = run_all(args.bank.resolve(), args.output.resolve(), list(dict.fromkeys(args.models)), args.profile, options=options)
+        result = run_all(args.bank.resolve(), args.output.resolve(), args.models, args.profile, options=options, model_config=args.model_config)
         print("HYPOTHESIS3_FINISHED", result["status"], flush=True)
 
 

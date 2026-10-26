@@ -1,0 +1,7 @@
+# Colab only; installed once with a constraint preserving its torch build.
+peft==0.21.0
+pydantic==2.13.5
+accelerate>=1,<2
+bitsandbytes==0.50.2
+pillow>=10,<13
+einops>=0.8,<1

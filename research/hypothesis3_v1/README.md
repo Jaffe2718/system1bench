@@ -83,8 +83,10 @@ All upstream files have exact SHA256 pins in the independent `sources.json`.
 The dedicated notebook has exactly four code steps: configure, collect, evaluate, download.
 It uses Colab's Python/PyTorch and one dependency install, with no Drive or smoke
 inference. Each model loads once in a separate process and immediately starts this
-bank. Default models are Laya English and Multilingual; other S1 models require
-their own validated adapters and are not implicitly claimed as covered.
+bank. The default queue is all 22 established local models, excluding Jev API.
+Native families use their official interfaces; Llama/Qwen controls use coded
+likelihood baselines. New backend code requires Colab validation. Memory,
+backend, disk and HF-access blocks are reported explicitly. See COMPATIBILITY.md.
 
 ```bash
 python research/hypothesis3_v1/run.py \
@@ -108,7 +110,7 @@ Original data terms remain in force; see `NOTICE.md`.
 ## Adaptive collection
 
 The notebook/CLI defaults to two CPU producers and one CUDA consumer. It starts
-with up to 8 encoded question rows and grows after 16 consecutive 2-second
+with up to 8 encoded question rows and grows after 64 consecutive 0.25-second
 samples below 70% RAM/GPU memory. Pressure halves capacity; OOM batches split
 and retry. Models still load and run sequentially. Use --scheduler serial for
 the prior per-request path.
@@ -121,9 +123,10 @@ See PROTOCOL.md for the complete memory, retry, timing and numerical policy.
 
 ## Evaluation without rerunning models
 
-The evaluator supports any model using the H3 journal contract. The existing
-inference CLI still supports Laya English/Multilingual; the other established
-models are explicitly NOT_RUN until their H3 collection adapters are added.
+The evaluator supports any model using the H3 journal contract. The default
+inference queue now contains all 22 local models. Resource/access/backend
+blocks are distinguished from NOT_RUN and FAILED; code admission does not
+claim that every new model has completed on T4.
 Jev API is skipped by default; NanoJev remains included in the cohort.
 
 Run the historical ZIP directly on CPU:
@@ -132,3 +135,14 @@ Run the historical ZIP directly on CPU:
 
 The notebook's third cell performs the same evaluation on the current run.
 The fourth cell packages raw predictions and evaluation reports/tables together.
+
+
+## Full cohort and monitor settings
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for per-family dispatch, lazy pinned
+source/checkpoint setup, fp16/NF4 provenance, T4 resource blocks and overrides.
+The memory monitor now samples at a target 4 Hz and requires 64 consecutive
+qualifying samples (about 16 seconds) before growing a Laya batch. It measures
+RAM/GPU memory; other model adapters currently run serial complete requests.
+No Windows dependency installation or model-weight download is part of local
+verification.

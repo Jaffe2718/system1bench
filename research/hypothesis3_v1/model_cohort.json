@@ -3,39 +3,60 @@
   "models": {
     "kev_08b": {
       "repo": "jaredpalmer/kev-0.8b",
-      "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e"
+      "revision": "9a45d25eb2ab761841196625383fa1dff0e56c1e",
+      "version_selection": "existing immutable official cache snapshot; not claimed latest",
+      "base_repo": "Qwen/Qwen3.5-0.8B-Base",
+      "base_revision": "dc7cdfe2ee4154fa7e30f5b51ca41bfa40174e68",
+      "temperature": 2.3510958125672174
     },
     "kev_4b": {
       "repo": "jaredpalmer/kev-4b",
-      "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101"
+      "revision": "139fdd94f1b6a6ad80cc15e08fcb99cac885a101",
+      "version_selection": "existing immutable official cache snapshot; not claimed latest",
+      "base_repo": "Qwen/Qwen3.5-4B-Base",
+      "base_revision": "1001bb4d826a52d1f399e183466143f4da7b741b",
+      "temperature": 2.406050072164233
     },
     "kev_9b": {
       "repo": "jaredpalmer/kev-9b",
-      "revision": "2629c06a5aeb0feb3b9783bafed17ed8f39ecf5c"
+      "revision": "2629c06a5aeb0feb3b9783bafed17ed8f39ecf5c",
+      "version_selection": "existing immutable official cache snapshot; not claimed latest",
+      "base_repo": "Qwen/Qwen3.5-9B-Base",
+      "base_revision": "68c46c4b3498877f3ef123c856ecfde50c39f404",
+      "temperature": 2.2973967099940698
     },
     "nanojev": {
       "repo": "C-Tianyu/NanoJev",
-      "revision": "047b927b30882a1138fc504821b82ac145a4b81a"
+      "revision": "047b927b30882a1138fc504821b82ac145a4b81a",
+      "version_selection": "existing immutable official cache snapshot; not claimed latest"
     },
     "qwen35_9b": {
       "repo": "Qwen/Qwen3.5-9B",
-      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a"
+      "revision": "c202236235762e1c871ad0ccb60c8ee5ba337b9a",
+      "version_selection": "official main pinned by verified-TLS metadata before inference"
     },
     "kev_27b": {
       "repo": "jaredpalmer/kev-27b",
-      "revision": "af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf"
+      "revision": "af0e6d551bdc2cc724f3e9d7a8bee1cd4fb8f7bf",
+      "base_repo": "Qwen/Qwen3.8-27B",
+      "base_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "version_selection": "official immutable revision, verified-TLS transfer with official file hashes",
+      "temperature": 1.319507910772894
     },
     "qwen35_08b": {
       "repo": "Qwen/Qwen3.5-0.8B",
-      "revision": "2fc06364715b967f1860aea9cf38778875588b17"
+      "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+      "version_selection": "official immutable revision, verified-TLS transfer with official file hashes"
     },
     "qwen35_4b": {
       "repo": "Qwen/Qwen3.5-4B",
-      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+      "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+      "version_selection": "official immutable revision, verified-TLS transfer with official file hashes"
     },
     "qwen38_27b": {
       "repo": "Qwen/Qwen3.8-27B",
-      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "version_selection": "official immutable revision, verified-TLS transfer with official file hashes"
     },
     "startlux_4b": {
       "repo": "startlux-models/StartLux-Decision-4B",
@@ -55,27 +76,39 @@
     },
     "llama32_1b_public": {
       "repo": "unsloth/Llama-3.2-1B-Instruct",
-      "revision": "5a8abab4a5d6f164389b1079fb721cfab8d7126c"
+      "revision": "5a8abab4a5d6f164389b1079fb721cfab8d7126c",
+      "admission_sha256": "1785bc154dd1c285313c846922b95b7b1a3cf3a36f80f8aa013aebe07f667b77",
+      "provenance": "public_community_distribution_unquantized"
     },
     "intern_08b": {
       "repo": "internlm/Intern-Decision-0.8B",
-      "revision": "85a0cc5a99d67ea8d56dfe98115689212867171d"
+      "revision": "85a0cc5a99d67ea8d56dfe98115689212867171d",
+      "admission_sha256": "2d85d272d7cdf0de0cf71f1a57bd305468cbcd3d510a640ac67f4965e6860c28",
+      "provenance": "official_download"
     },
     "llama32_3b_public": {
       "repo": "unsloth/Llama-3.2-3B-Instruct",
-      "revision": "006f5dcd1393c3add266de40994ba96225e9689d"
+      "revision": "006f5dcd1393c3add266de40994ba96225e9689d",
+      "admission_sha256": "1a74ead22621cc17d245cc42b0180f528e11c821d80796a5196b1af6e11d72d6",
+      "provenance": "public_community_distribution_unquantized"
     },
     "intern_2b": {
       "repo": "internlm/Intern-Decision-2B",
-      "revision": "8797836c65fc91a2435b1fb6850b5f0aabd75cc3"
+      "revision": "8797836c65fc91a2435b1fb6850b5f0aabd75cc3",
+      "admission_sha256": "6ce210a9581a07aea3365201b7079daa9c1df3c8da981a809a0cad1e015aff26",
+      "provenance": "official_download"
     },
     "qwen3_8b": {
       "repo": "Qwen/Qwen3-8B",
-      "revision": "b968826d9c46dd6066d109eabc6255188de91218"
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "admission_sha256": "db6a99150ec3b84454581c1f9f5cd3d8999b49f8b3d5c8ee89764c065344c7a9",
+      "provenance": "existing_gpu29_original"
     },
     "qwen3_17b": {
       "repo": "Qwen/Qwen3-1.7B",
-      "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+      "revision": "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e",
+      "admission_sha256": "0aee91447e5c3f97729a33d9267e0160b5a10cc91d8981b388a08634058fe1c8",
+      "provenance": "existing_gpu24_original_weights_with_pinned_official_tokenizer_config"
     },
     "english": {
       "repo": "convaiinnovations/laya",

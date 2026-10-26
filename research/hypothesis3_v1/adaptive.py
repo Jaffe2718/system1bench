@@ -12,7 +12,7 @@ import traceback
 
 DEFAULTS = dict(initial_batch_rows=8, max_batch_rows=128, max_padded_tokens=32768,
                 producer_workers=2, prefetch_cases=64, lookahead_cases=64,
-                sample_interval=2., low_samples=16, grow_below=.70,
+                sample_interval=.25, low_samples=64, grow_below=.70,
                 shrink_above=.85, reserve_gib=2.)
 
 
@@ -90,7 +90,7 @@ class Controller:
                 self.low_count = 0
                 return
             low = (sample["ram_ratio"] < o["grow_below"] and sample["gpu_ratio"] < o["grow_below"]
-                   and sample["completed_batches"] > 0 and sample["backlog"] > 0)
+                   and (sample["completed_batches"] > 0 or sample.get("forward_inflight", False)) and sample["backlog"] > 0)
             self.low_count = self.low_count + 1 if low else 0
             if self.low_count < o["low_samples"]:
                 return
@@ -125,8 +125,17 @@ class Monitor:
         self.peak = 0
         self.batches = 0
         self.requests = 0
+        self.inflight = False
         self.started = time.monotonic()
         self.thread = threading.Thread(target=self._loop, daemon=True)
+
+    def begin_forward(self):
+        with self.lock:
+            self.inflight = True
+
+    def end_forward(self):
+        with self.lock:
+            self.inflight = False
 
     def completed(self, peak, requests):
         with self.lock:
@@ -137,11 +146,11 @@ class Monitor:
     def poll(self):
         sample = self.meter.sample()
         with self.lock:
-            peak, batches, requests = self.peak, self.batches, self.requests
+            peak, batches, requests, inflight = self.peak, self.batches, self.requests, self.inflight
             self.peak = self.batches = self.requests = 0
         external = max(0, sample["gpu_used"] - sample["gpu_reserved"])
         sample.update(gpu_ratio=min(1., max(sample["gpu_used"], external + peak) / sample["gpu_total"]),
-                      peak_reserved=peak, completed_batches=batches, completed_requests=requests,
+                      peak_reserved=peak, completed_batches=batches, completed_requests=requests, forward_inflight=inflight,
                       backlog=self.backlog(), batch_rows=self.controller.limit(),
                       elapsed=time.monotonic() - self.started)
         self.event("resource_sample", **sample)
@@ -149,13 +158,21 @@ class Monitor:
         return sample
 
     def _loop(self):
-        while not self.stop.wait(self.options["sample_interval"]):
+        interval = self.options["sample_interval"]
+        deadline = time.monotonic() + interval
+        while not self.stop.wait(max(0., deadline - time.monotonic())):
             try:
                 self.poll()
             except Exception as exc:
                 # A broken monitor must never authorize blind growth.
                 self.controller.pressure("monitor_error")
                 self.event("monitor_error", error=type(exc).__name__, message=str(exc))
+            deadline += interval
+            if deadline < time.monotonic():
+                # Do not burst several stale samples after a delayed CUDA query.
+                deadline = time.monotonic() + interval
+                with self.controller.lock:
+                    self.controller.low_count = 0
 
     def close(self):
         self.stop.set()
@@ -321,12 +338,15 @@ def collect(rows, adapter, budget, options, event, engine=None, meter=None):
         batch_id += 1
         bid = batch_id
         error = None
+        monitor.begin_forward()
         try:
             outputs, stats = engine.forward(batch)
             if len(outputs) != len(batch):
                 raise ValueError("Heterogeneous batch output count mismatch")
         except Exception as exc:
             error = CapturedError(exc)
+        finally:
+            monitor.end_forward()
         if error is not None:
             # Outside the except block: traceback frames and activation tensors can be released.
             if error.fatal_cuda:

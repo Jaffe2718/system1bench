@@ -356,14 +356,16 @@ per-suite compressed raw predictions and a completed-run manifest:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Jaffe2718/system1bench/blob/main/notebooks/system1bench_t4.ipynb)
 
 中文：选择 T4 GPU 后，从上到下运行 notebook。它会克隆这个公开 fork，
-复用 Colab 当前 Python 与预装 PyTorch，在可访问系统包的虚拟环境中安装 Laya 评测依赖，
-执行依赖冲突、模块导入和真实 GPU 推理检查，再运行评测。结果仅保存到 Colab 临时磁盘，
+直接复用 Colab 当前 Python 与预装 PyTorch，一次安装 Laya 评测依赖，
+检查所需模块导入后直接运行正式评测。结果仅保存到 Colab 临时磁盘，
 完成后下载 ZIP；不挂载或访问 Google Drive。
 **无需配置 GH_TOKEN，也不会从 Colab 提交 GitHub。**
 
 This notebook runs Laya English or Multilingual with batch size 1. It reuses
-Colab's installed PyTorch and checks the dependency plan before installation.
-It includes data preparation, choice/noul/score inference checks, evaluation,
+Colab's current Python and installed PyTorch. One install command uses a
+constraint to preserve the installed torch version; no virtual environment or
+separate dependency dry-run is needed.
+It includes module import checks, data preparation and direct evaluation,
 error-count checks, reports and ZIP export from temporary Colab storage, without
 accessing Google Drive. It does not adapt the BF16 8B/27B
 baselines for T4. GPU execution has not yet been validated in Colab.

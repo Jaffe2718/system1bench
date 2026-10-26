@@ -361,7 +361,7 @@ per-suite compressed raw predictions and a completed-run manifest:
 完成后下载 ZIP；不挂载或访问 Google Drive。
 **无需配置 GH_TOKEN，也不会从 Colab 提交 GitHub。**
 
-This notebook runs Laya English or Multilingual with batch size 1. It reuses
+This notebook runs Laya English and Multilingual sequentially with batch size 1. It reuses
 Colab's current Python and installed PyTorch. One install command uses a
 constraint to preserve the installed torch version; no virtual environment or
 separate dependency dry-run is needed.
@@ -371,6 +371,20 @@ accessing Google Drive. It does not adapt the BF16 8B/27B
 baselines for T4. GPU execution has not yet been validated in Colab.
 See [the Colab dependency file](requirements-colab-t4.txt).
 Use a fresh output directory when changing dependencies, code, model or batch size.
+
+Each model runs in its own process. The notebook enables `--continue-on-error`
+so audit, prediction, GPU synchronization, answer-format and decoding failures
+are recorded per case without blocking later cases or models. Failed decisions
+remain in the accuracy denominator; failed audits are marked incomplete/unknown.
+The normal single-model CLI keeps its existing strict audit behavior unless this
+flag is supplied. Interrupted runs can still be stopped with the notebook button.
+
+`run_status.json` and `run_status.csv` distinguish `OK`, `DONE_WITH_ERRORS`,
+`FAILED` and suites that were `NOT_RUN`. `failures.csv` lists case IDs, phases
+and exception messages; per-model `errors.jsonl` retains full tracebacks.
+Reports are generated separately under `runs/<model>/` so one incomplete model
+does not block another model's report. These status labels describe execution,
+not prediction correctness. No separate smoke inference is performed.
 
 The historical source registry also lists `clinc/api_metadata.json`, an archived
 API-response receipt that is not a file in the pinned Hugging Face revision and

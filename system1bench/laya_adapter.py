@@ -45,11 +45,11 @@ class LayaAdapter:
         return self.agent.predict_batch(states, questions, batch_size=batch_size, lang=language, **budget)
 
     def audit(self, state, questions, budget):
-        from laya.common import build_sequence, encode_text, render_options, serialize_state
+        from laya.common import build_sequence, render_options, serialize_state
 
         tok = self.agent.tok
         state_text = serialize_state(state)
-        state_ids = encode_text(tok, state_text.replace(tok.mask_token, " "), add_special_tokens=False)["input_ids"]
+        state_ids = tok(state_text.replace(tok.mask_token, " "), add_special_tokens=False)["input_ids"]
         result = {}
         for qid, q in questions.items():
             cache_key = (digest(q), budget["max_len"], budget["head_max_len"])
@@ -64,9 +64,9 @@ class LayaAdapter:
                 continue
             internal = self.agent._to_internal(q)
             empty, markers = build_sequence(tok, "", internal, state_ids=[], **budget)
-            original = [encode_text(tok, " " + s.replace(tok.mask_token, " "), add_special_tokens=False)["input_ids"] for s in render_options(internal)]
+            original = [tok(" " + s.replace(tok.mask_token, " "), add_special_tokens=False)["input_ids"] for s in render_options(internal)]
             actual = [empty[p + 1:(markers[i + 1] if i + 1 < len(markers) else len(empty) - 2)] for i, p in enumerate(markers)]
-            ins = encode_text(tok, "%s question: %s" % (internal["t"], str(internal["ins"]).replace(tok.mask_token, " ")), add_special_tokens=False)["input_ids"]
+            ins = tok("%s question: %s" % (internal["t"], str(internal["ins"]).replace(tok.mask_token, " ")), add_special_tokens=False)["input_ids"]
             actual_ins = empty[1:markers[0] - 1] if markers else []
             state_shortened = len(state_ids) > budget["max_len"] - len(empty)
             shortened = sum(a != b for a, b in zip(actual, original)) + abs(len(actual) - len(original))

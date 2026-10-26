@@ -59,3 +59,48 @@ portability. The frozen original experiments are neither modified nor extended.
 - Specify paired/group-level uncertainty, multiple comparisons and the rule, if
   any, for selecting a preferred K from development data.
 - Keep confirmation outcomes out of protocol/model/threshold selection.
+
+
+## Adaptive collection policy
+
+The default notebook/CLI uses a bounded producer/consumer scheduler. Two CPU
+producers each own a tokenizer and audit cache. One GPU consumer combines
+heterogeneous requests using Laya 0.3.20's encoder, collator and decoder; it does
+not call the public same-questions batch API on differing questions. Model
+weights are loaded once, and models run in separate sequential processes.
+
+Initial capacity is at most 8 encoded question rows (reduced to 4 or 1 when
+initial free GPU memory is below 6 or 3 GiB). The cap grows by 1.5x only after
+16 consecutive active samples, 2 seconds apart, with both host RAM and effective
+GPU memory below 70%. Effective memory includes global GPU usage and the
+inter-sample reserved-memory peak, rather than only idle allocations. At 85%
+usage or less than 2 GiB free GPU memory the cap halves; growth pauses for 16
+samples. Capacity is capped at 128 question rows and 32,768 padded tokens per
+batch. A single request remains atomic, including all multiselect question heads.
+These are memory heuristics, not a guarantee of maximum throughput or OOM avoidance.
+
+The queue and lookahead each hold at most 64 prepared requests. Batching uses
+only panel, candidate count, language and encoded length; it does not use gold
+answers or model outcomes. Request order can change. Candidates, IDs, text,
+budgets, references and the frozen bank receipt remain unchanged.
+
+OOM batches release cache, halve capacity and retry by splitting; other batch
+errors also split to isolate bad requests. Single-request errors are recorded
+and collection continues. Fatal CUDA context errors abort that model process;
+the next model starts in a fresh process. The GPU consumer calls the pinned
+forward directly so upstream Laya cannot silently move inference to CPU.
+
+The adaptive_events.jsonl contains resource samples, growth/shrink decisions,
+batch IDs, actual shapes, forward durations and retries. Each raw prediction
+records its execution batch. The inference_seconds field is the row-weighted
+share of successful batch forward time, not per-request latency; failed attempts,
+CPU preparation and decoding are excluded. Use model start/finish timestamps
+for end-to-end speed comparisons. Raw answers and evaluation-deferred behavior
+are unchanged. Floating-point output may differ with batch shape, so adaptive
+runs use a fresh directory/signature and must not be merged with serial journals.
+
+Use --scheduler serial to retain sequential calls. Adaptive settings are CLI
+options (for example --initial-batch-rows 4 --max-batch-rows 64) and notebook
+configuration entries. The notebook still installs dependencies once while
+constraining torch to Colab's installed version; psutil is the added monitoring
+dependency. Local scheduling/failure tests do not establish T4 speedup.

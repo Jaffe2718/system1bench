@@ -4,7 +4,7 @@ import csv
 import json
 import subprocess
 import sys
-import traceback
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,8 +14,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(HERE))
 
 import build
+import adaptive
 from system1bench.common import decode, labels
-from system1bench.run import evaluate_batch
+from system1bench.run import evaluate_batch, failed_audit
 
 
 def now():
@@ -35,10 +36,14 @@ def load_bank(bank, profile="full"):
 def predict_case(adapter, row, budget, failure):
     outputs, audits, error, seconds = evaluate_batch(
         adapter, [row], row["questions"], row["language"], budget, True, failure)
+    return format_prediction(row, outputs[0] if outputs else None, audits[0], error, seconds, failure)
+
+
+def format_prediction(row, output, audit, error, seconds, failure):
     answers = {}
     if error is None:
         try:
-            answers = outputs[0].get("answers", {})
+            answers = output.get("answers", {})
             if not isinstance(answers, dict):
                 raise ValueError("Answers must be an object")
         except Exception as exc:
@@ -70,8 +75,8 @@ def predict_case(adapter, row, budget, failure):
                                 "split", "k", "conditions", "gold_ids", "request_sha256")}
     return dict(**kept, predicted_ids=predicted,
                 decision_errors=invalid, error=next((v["error"] for v in decoded.values() if v["error"]), None),
-                complete_input=all(v.get("complete", False) for v in audits[0].values()),
-                audit=audits[0], answers=decoded, inference_seconds=seconds)
+                complete_input=all(v.get("complete", False) for v in audit.values()),
+                audit=audit, answers=decoded, inference_seconds=seconds)
 
 
 def journal_rows(path, wanted):
@@ -89,7 +94,8 @@ def journal_rows(path, wanted):
     return saved
 
 
-def run_model(bank, output, model, profile="full", adapter_factory=None):
+def run_model(bank, output, model, profile="full", adapter_factory=None, options=None):
+    options = execution_options(options)
     rows = load_bank(bank, profile)
     output.mkdir(parents=True, exist_ok=True)
     metadata_path = output / "metadata.json"
@@ -100,11 +106,14 @@ def run_model(bank, output, model, profile="full", adapter_factory=None):
     # Each model is constructed once, in its own process. No separate smoke call.
     adapter = adapter_factory(model)
     signature = dict(bank_manifest_sha256=build.file_sha(bank / "manifest.json"), profile=profile,
-                     source_sha256={p.name: build.text_sha(p) for p in (HERE / "build.py", HERE / "run.py")},
+                     source_sha256={p.name: build.text_sha(p) for p in (HERE / "build.py", HERE / "run.py", HERE / "adaptive.py")},
                      adapter_sha256=build.text_sha(ROOT / "system1bench/laya_adapter.py"),
                      common_sha256=build.text_sha(ROOT / "system1bench/common.py"),
                      runner_sha256=build.text_sha(ROOT / "system1bench/run.py"),
-                     model=adapter.metadata, budget=dict(max_len=8192, head_max_len=4096), batch_size=1,
+                     model=adapter.metadata, budget=dict(max_len=8192, head_max_len=4096), execution=options,
+                     inference_seconds_semantics=("row-weighted share of successful CUDA batch forward time; "
+                                                 "excludes CPU preparation, decoding and retry overhead"
+                                                 if options["scheduler"] == "adaptive" else "serial predict call"),
                      noul_decoding_threshold=.5, evaluation_performed=False)
     if old and old["signature"] != signature:
         raise ValueError("Run signature changed; use a new output directory")
@@ -113,21 +122,43 @@ def run_model(bank, output, model, profile="full", adapter_factory=None):
     build.dump(metadata_path, meta)
     journal = output / "predictions.jsonl"
     saved = journal_rows(journal, {r["id"]: r for r in rows})
+    event_lock = threading.Lock()
+
+    def event(kind, **values):
+        with event_lock:
+            with (output / "adaptive_events.jsonl").open("a", encoding="utf-8") as events:
+                events.write(json.dumps(dict(time=now(), event=kind, **values), ensure_ascii=False) + "\n")
+        if kind in ("start", "grow", "shrink", "batch_retry", "stop"):
+            print("SCHEDULER", kind, json.dumps(values, ensure_ascii=False), flush=True)
+
+    pending = [r for r in rows if r["id"] not in saved]
+    results = (adaptive.collect(pending, adapter, signature["budget"],
+                               {k: v for k, v in options.items() if k != "scheduler"}, event)
+               if options["scheduler"] == "adaptive" else
+               (dict(prepared=dict(row=r)) for r in pending))
     with journal.open("a", encoding="utf-8", newline="\n") as stream:
-        for row in rows:
-            if row["id"] in saved:
-                continue
+        for result in results:
+            row = result["prepared"]["row"]
 
             def failure(stage, exc, qid=None):
                 detail = dict(model=model, id=row["id"], base_id=row["base_id"], source=row["source"],
                               panel=row["panel"], k=row["k"], stage=stage, qid=qid,
-                              error=type(exc).__name__, message=str(exc),
-                              traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+                              error=adaptive.error_name(exc), message=str(exc),
+                              traceback=adaptive.error_trace(exc))
                 with (output / "errors.jsonl").open("a", encoding="utf-8") as errors:
                     errors.write(json.dumps(detail, ensure_ascii=False) + "\n")
                 print("CASE_ERROR", model, row["id"], stage, detail["error"], flush=True)
 
-            prediction = predict_case(adapter, row, signature["budget"], failure)
+            if options["scheduler"] == "serial":
+                prediction = predict_case(adapter, row, signature["budget"], failure)
+            else:
+                error = result["error"]
+                if error is not None:
+                    failure(result["stage"], error)
+                prediction = format_prediction(
+                    row, result["output"], result["prepared"].get("audit", failed_audit(row["questions"])),
+                    adaptive.error_name(error) if error else None, result["seconds"], failure)
+                prediction["execution"] = result["execution"]
             stream.write(build.encode(prediction).decode("utf-8") + "\n")
             stream.flush()
             saved[row["id"]] = prediction
@@ -164,7 +195,8 @@ def command(args, log):
             raise
 
 
-def run_all(bank, output, models, profile="full", execute=command):
+def run_all(bank, output, models, profile="full", execute=command, options=None):
+    options = execution_options(options)
     expected = load_bank(bank, profile)
     output.mkdir(parents=True, exist_ok=True)
     summary = dict(status="RUNNING", experiment="hypothesis3-v1", profile=profile,
@@ -180,7 +212,8 @@ def run_all(bank, output, models, profile="full", execute=command):
         build.dump(output / "run_status.json", summary)
         try:
             code = execute([sys.executable, "-u", str(HERE / "run.py"), "--model", model,
-                            "--bank", str(bank), "--output", str(model_output), "--profile", profile], log)
+                            "--bank", str(bank), "--output", str(model_output), "--profile", profile,
+                            *option_args(options)], log)
             result["exit_code"] = code
             path = model_output / "metadata.json"
             meta = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
@@ -222,6 +255,22 @@ def run_all(bank, output, models, profile="full", execute=command):
     return summary
 
 
+def execution_options(options=None):
+    # Existing Python callers keep serial behavior; the notebook/CLI explicitly select adaptive.
+    options = dict(options or {"scheduler": "serial"})
+    scheduler = options.pop("scheduler", "serial")
+    if scheduler not in ("serial", "adaptive"):
+        raise ValueError("Unknown scheduler")
+    return dict(scheduler=scheduler, **adaptive.validate_options(options)) if scheduler == "adaptive" else dict(scheduler="serial")
+
+
+def option_args(options):
+    result = []
+    for key, value in options.items():
+        result += ["--" + key.replace("_", "-"), str(value)]
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bank", type=Path, required=True)
@@ -229,11 +278,16 @@ def main():
     parser.add_argument("--models", nargs="+", choices=["english", "multilingual"], default=["english", "multilingual"])
     parser.add_argument("--model", choices=["english", "multilingual"])
     parser.add_argument("--profile", choices=["full", "pilot"], default="full")
+    parser.add_argument("--scheduler", choices=["serial", "adaptive"], default="adaptive")
+    for key, value in adaptive.DEFAULTS.items():
+        parser.add_argument("--" + key.replace("_", "-"), type=type(value), default=value)
     args = parser.parse_args()
+    options = execution_options(dict(scheduler=args.scheduler,
+                                     **{k: getattr(args, k) for k in adaptive.DEFAULTS}))
     if args.model:
-        run_model(args.bank.resolve(), args.output.resolve(), args.model, args.profile)
+        run_model(args.bank.resolve(), args.output.resolve(), args.model, args.profile, options=options)
     else:
-        result = run_all(args.bank.resolve(), args.output.resolve(), list(dict.fromkeys(args.models)), args.profile)
+        result = run_all(args.bank.resolve(), args.output.resolve(), list(dict.fromkeys(args.models)), args.profile, options=options)
         print("HYPOTHESIS3_FINISHED", result["status"], flush=True)
 
 

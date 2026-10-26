@@ -101,3 +101,17 @@ answers, derived IDs, references, group IDs, condition aliases and token audits.
 The download contains the exact bank, source/builder receipts, runner code, runtime
 versions and logs so evaluation can be designed after inspecting the returned data.
 Original data terms remain in force; see `NOTICE.md`.
+
+
+## Adaptive collection
+
+The notebook/CLI defaults to two CPU producers and one CUDA consumer. It starts
+with up to 8 encoded question rows and grows after 16 consecutive 2-second
+samples below 70% RAM/GPU memory. Pressure halves capacity; OOM batches split
+and retry. Models still load and run sequentially. Use --scheduler serial for
+the prior per-request path.
+
+The fixed bank is unchanged. New outputs include adaptive_events.jsonl and
+per-request batch metadata; use a fresh output directory. The notebook retains
+configure -> collect -> download, Colab's installed torch, and no smoke/Drive.
+See PROTOCOL.md for the complete memory, retry, timing and numerical policy.
